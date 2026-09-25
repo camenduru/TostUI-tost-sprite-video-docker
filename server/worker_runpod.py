@@ -254,9 +254,15 @@ def generate(input):
                                         file_name=f'background_{unique_id}')
                 image_bg = LoadImage.load_image(bg_path)[0]
             else:
-                # default green screen (matches repo title); Qwen Edit prompt composites it as <image2>
-                image_bg = torch.zeros((1, 1024, 1024, 3), dtype=image_albedo.dtype, device=image_albedo.device)
-                image_bg[..., 1] = 1.0
+                # default background: radial white(center)->black(edges) gradient, matched to albedo size
+                _h, _w = int(image_albedo.shape[1]), int(image_albedo.shape[2])
+                _yy, _xx = torch.meshgrid(
+                    torch.linspace(-1.0, 1.0, _h, device=image_albedo.device),
+                    torch.linspace(-1.0, 1.0, _w, device=image_albedo.device),
+                    indexing="ij")
+                _dist = torch.sqrt(_xx ** 2 + _yy ** 2) / 1.41421356237  # 0 center -> 1 corner
+                _grad = (1.0 - _dist).clamp(0.0, 1.0).to(dtype=image_albedo.dtype)
+                image_bg = _grad[None, :, :, None].repeat(1, 1, 1, 3)
 
             model_edit = QwenImage21Cache.execute(unet_qwen, cache_device, cache_dtype)[0]
             positive_edit, negative_edit_c, latent_empty = TextEncodeQwenImage21.execute(
