@@ -3,7 +3,7 @@
 🥳 Please become my sponsor: https://github.com/sponsors/camenduru <br />
 🍞 TostUI repo: https://github.com/camenduru/TostUI
 
-#### 🍞 TostUI - Tost Upscaler 3
+#### 🍞 TostUI - Tost Sprite Video
 
 1.  **Install Docker**\
     [Download Docker Desktop (Windows AMD64)](https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe)
