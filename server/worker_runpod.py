@@ -146,6 +146,7 @@ def generate(input):
 
         # ============ workflow defaults (from text_image_albedo_green_screen_video.json) ============
         # --- T2I ---
+        enable_text_to_image = _opt_flag(values.get('enable_text_to_image', True), True)
         prompt_t2i = values.get('prompt_t2i', "pixel art, 16-bit pixel art, full body a furious female warrior, walking, eyes blazing, lips,fists clenched, grips a bloodied axe, her tattered trench coat flares as she lunges at a tenacious, multi-eyed eldritch horror, motion-blurred limbs, chiaroscuro highlights, 8K hyperreal grit, shallow depth-of-field, cinematic recoil dynamics, ultra-detailed sprite-icon textures, emotional fury collides with primal jealousy raw aggression erupts in 90fps kinetic chaos, thunderous impact frame, airborne shrapnel, cracked cobblestones, breathing fireflies in shadow")
         t2i_lora = values.get('t2i_lora', 'k2-pixel128.safetensors')
         t2i_lora_strength = values.get('t2i_lora_strength', 1.0)
@@ -176,8 +177,8 @@ def generate(input):
         edit_resolution = values.get('edit_resolution', 0)
         cache_device = values.get('cache_device', 'auto')
         cache_dtype = values.get('cache_dtype', 'default')
-        background_image = values.get('background_image')  # optional URL; None -> solid green
-        input_image = values.get('input_image')  # optional URL; if set, skip T2I and use it directly
+        input_image2 = values.get('input_image2')  # optional URL; None -> gradient
+        input_image1 = values.get('input_image1')  # required when enable_text_to_image=false
         # --- MiniMax H3 ---
         prompt_video = values.get('prompt_video', "Front view, full body of the exact same character as the reference image, facing the camera. Entire body visible from head to feet with clear margin around the silhouette. Character performs a smooth loopable walk cycle in place: alternating mid-stride poses, one foot stepping forward while the opposite foot pushes off, arms swinging naturally in opposition, torso upright, head facing forward at all times. Character stays centered in frame at constant scale: no walking toward the camera, no turning, no jumping, no dancing, no extra limbs, no morphing. Fixed static camera: no movement, no zoom, no pan, no tilt, no gradients, no shadows, no texture, no lighting variation, identical in every frame. Preserve the reference art style, pixel-art look, colors, lighting and proportions exactly; do not redesign the character. Consistent character identity across all frames. Audio: soft rhythmic footsteps only, no music, no background noise.")
         video_width = values.get('video_width')  # None -> ResolutionSelector 0.4MP
@@ -210,13 +211,9 @@ def generate(input):
             w_vid, h_vid = int(video_width), int(video_height)
 
         # ============ 1. T2I (subgraph 547: 544->545->51->533->546->534) ============
-        # Skipped when input_image is provided.
-        input_image_path = None
-        if input_image:
-            input_image_path = download_file(url=input_image, save_dir=folder_paths.get_input_directory(),
-                                             file_name=f'input_image_{unique_id}')
-            image_t2i = LoadImage.load_image(input_image_path)[0]
-        else:
+        # Skipped when enable_text_to_image=false -> use input_image1 directly.
+        input_image1_path = None
+        if enable_text_to_image:
             model_t2i = LoraLoaderModelOnly.load_lora_model_only(unet_t2i, t2i_lora, strength_model=t2i_lora_strength)[0]
             model_t2i = LoraLoaderModelOnly.load_lora_model_only(model_t2i, bypass_lora, strength_model=bypass_strength)[0]
             positive_t2i = CLIPTextEncode.encode(clip_t2i, prompt_t2i)[0]
@@ -226,6 +223,12 @@ def generate(input):
                                          positive_t2i, negative_t2i, latent_t2i, denoise=1.0)[0]
             comfy.model_management.unload_all_models()
             image_t2i = VAEDecode.decode(vae_t2i, latent_t2i)[0].detach()
+        else:
+            if not input_image1:
+                raise ValueError("input_image1 is required when enable_text_to_image=false")
+            input_image1_path = download_file(url=input_image1, save_dir=folder_paths.get_input_directory(),
+                                              file_name=f'input_image1_{unique_id}')
+            image_t2i = LoadImage.load_image(input_image1_path)[0]
 
         # ============ 2. Albedo (subgraph 530) ============
         # Skipped when enable_albedo=false -> passthrough image_t2i.
@@ -248,10 +251,10 @@ def generate(input):
         # Skipped when enable_qwen_edit=false -> passthrough image_albedo.
         bg_path = None
         if enable_qwen_edit:
-            if background_image:
+            if input_image2:
                 # LoadImage only accepts paths under the input dir (path-traversal guard)
-                bg_path = download_file(url=background_image, save_dir=folder_paths.get_input_directory(),
-                                        file_name=f'background_{unique_id}')
+                bg_path = download_file(url=input_image2, save_dir=folder_paths.get_input_directory(),
+                                        file_name=f'input_image2_{unique_id}')
                 image_bg = LoadImage.load_image(bg_path)[0]
             else:
                 # default background: radial white(center)->black(edges) gradient, matched to albedo size
@@ -317,7 +320,7 @@ def generate(input):
         traceback.print_exc()
         return {"job_id": job_id if 'job_id' in locals() else None, "result": str(e), "status": "FAILED"}
     finally:
-        for p in [locals().get('bg_path'), locals().get('input_image_path')]:
+        for p in [locals().get('bg_path'), locals().get('input_image1_path')]:
             if p and os.path.exists(p):
                 os.remove(p)
         directory_path = Path(tmp_dir)
