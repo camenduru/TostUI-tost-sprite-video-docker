@@ -5,6 +5,8 @@
 
 #### 🍞 TostUI - Tost Sprite Video
 
+<img width="3840" height="2160" alt="Screenshot 2026-09-25 231338" src="https://github.com/user-attachments/assets/995d6fa2-ccd0-4f48-8ccd-eac01e17ac0b" />
+
 1.  **Install Docker**\
     [Download Docker Desktop (Windows AMD64)](https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe)
     and run it.
